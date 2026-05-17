@@ -29,20 +29,29 @@ import {
   X,
   Zap
 } from "lucide-react";
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Mesh } from "three";
 
 type View = "overview" | "bots" | "wallet" | "signals" | "security";
 type Tx = { id: string; type: string; asset: string; amount: string; status: string; time: string };
 type BotState = { name: string; market: string; allocation: number; risk: number; status: "Live" | "Paused" };
+type MarketCoin = {
+  id: string;
+  symbol: string;
+  name: string;
+  price: number;
+  change24h: number;
+  marketCap: number;
+  volume: number;
+};
 
-const market = [
-  ["BTC", "$103,824", "+4.82%"],
-  ["ETH", "$5,412", "+2.18%"],
-  ["SOL", "$214.70", "+8.06%"],
-  ["BNB", "$724.11", "+1.42%"],
-  ["ARB", "$2.18", "-0.74%"],
-  ["LINK", "$31.09", "+5.33%"]
+const fallbackMarkets: MarketCoin[] = [
+  { id: "bitcoin", symbol: "BTC", name: "Bitcoin", price: 103824, change24h: 4.82, marketCap: 2060000000000, volume: 8200000000 },
+  { id: "ethereum", symbol: "ETH", name: "Ethereum", price: 5412, change24h: 2.18, marketCap: 650000000000, volume: 5100000000 },
+  { id: "solana", symbol: "SOL", name: "Solana", price: 214.7, change24h: 8.06, marketCap: 101000000000, volume: 2400000000 },
+  { id: "binancecoin", symbol: "BNB", name: "BNB", price: 724.11, change24h: 1.42, marketCap: 105000000000, volume: 980000000 },
+  { id: "arbitrum", symbol: "ARB", name: "Arbitrum", price: 2.18, change24h: -0.74, marketCap: 7100000000, volume: 310000000 },
+  { id: "chainlink", symbol: "LINK", name: "Chainlink", price: 31.09, change24h: 5.33, marketCap: 19000000000, volume: 740000000 }
 ];
 
 const navItems: Array<[View, string, typeof Gauge]> = [
@@ -52,6 +61,20 @@ const navItems: Array<[View, string, typeof Gauge]> = [
   ["signals", "Signals", LineChart],
   ["security", "Security", ShieldCheck]
 ];
+
+function formatCurrency(value: number, compact = false) {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    notation: compact ? "compact" : "standard",
+    maximumFractionDigits: value > 100 ? 0 : 2
+  }).format(value);
+}
+
+function formatChange(value: number) {
+  const sign = value >= 0 ? "+" : "";
+  return `${sign}${value.toFixed(2)}%`;
+}
 
 function AICore() {
   const mesh = useRef<Mesh>(null);
@@ -131,16 +154,21 @@ function SectionTitle({ eyebrow, title, copy }: { eyebrow: string; title: string
   );
 }
 
-function ChartPanel({ activeMarket }: { activeMarket: string }) {
+function ChartPanel({ activeMarket, marketCoin }: { activeMarket: string; marketCoin?: MarketCoin }) {
   const points = activeMarket === "ETH" ? "0,72 56,60 112,70 168,44 224,30 280,42 336,22 392,28 448,16 504,20" : "0,78 56,64 112,72 168,38 224,46 280,26 336,42 392,18 448,30 504,12";
+  const price = marketCoin ? formatCurrency(marketCoin.price) : activeMarket === "ETH" ? "$5,412.18" : "$103,824.20";
+  const change = marketCoin ? formatChange(marketCoin.change24h) : "+4.82%";
+  const volume = marketCoin ? `Vol 24h ${formatCurrency(marketCoin.volume, true)}` : "Vol 24h $8.2B";
+  const changeIsPositive = !change.startsWith("-");
+
   return (
     <div className="glass glow-border rounded-3xl p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-slate-400">{activeMarket} / USDT Perpetual</p>
-          <h3 className="mt-1 text-2xl font-semibold">{activeMarket === "ETH" ? "$5,412.18" : "$103,824.20"}</h3>
+          <h3 className="mt-1 text-2xl font-semibold">{price}</h3>
         </div>
-        <span className="rounded-full border border-mint/30 bg-mint/10 px-3 py-1 text-sm text-mint">+4.82%</span>
+        <span className={`rounded-full border px-3 py-1 text-sm ${changeIsPositive ? "border-mint/30 bg-mint/10 text-mint" : "border-rose-300/30 bg-rose-300/10 text-rose-300"}`}>{change}</span>
       </div>
       <svg viewBox="0 0 504 120" className="mt-7 h-44 w-full overflow-visible">
         <defs>
@@ -157,7 +185,7 @@ function ChartPanel({ activeMarket }: { activeMarket: string }) {
         <motion.polyline key={activeMarket} points={points} fill="none" stroke="url(#chart)" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 1.2, ease: "easeOut" }} />
       </svg>
       <div className="grid grid-cols-3 gap-3 text-sm">
-        {["Vol 24h $8.2B", "AI Sharpe 2.92", "Risk low"].map((item) => (
+        {[volume, "AI Sharpe 2.92", "Risk low"].map((item) => (
           <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.04] p-3 text-slate-300">{item}</div>
         ))}
       </div>
@@ -165,7 +193,7 @@ function ChartPanel({ activeMarket }: { activeMarket: string }) {
   );
 }
 
-function AppDashboard() {
+function AppDashboard({ markets, marketStatus }: { markets: MarketCoin[]; marketStatus: string }) {
   const [view, setView] = useState<View>("overview");
   const [activeMarket, setActiveMarket] = useState("BTC");
   const [bot, setBot] = useState<BotState>({ name: "Astra Scalper", market: "BTC/USDT", allocation: 72, risk: 8, status: "Live" });
@@ -178,6 +206,7 @@ function AppDashboard() {
   const [securityStep, setSecurityStep] = useState(2);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState(["Neura support online. Ask about bots, wallet flows, or API setup."]);
+  const selectedMarket = markets.find((coin) => coin.symbol === activeMarket) ?? markets[0];
 
   function addTransaction(type: string, formData: FormData) {
     const asset = String(formData.get("asset") || "USDT");
@@ -235,20 +264,23 @@ function AppDashboard() {
         <div className="min-w-0">
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap gap-2">
-              {["BTC", "ETH", "SOL"].map((coin) => (
-                <button key={coin} onClick={() => setActiveMarket(coin)} className={`rounded-full px-4 py-2 text-sm transition ${activeMarket === coin ? "bg-white text-night" : "border border-white/10 text-slate-300 hover:border-cyan/60"}`}>
-                  {coin}/USDT
+              {markets.slice(0, 3).map((coin) => (
+                <button key={coin.id} onClick={() => setActiveMarket(coin.symbol)} className={`rounded-full px-4 py-2 text-sm transition ${activeMarket === coin.symbol ? "bg-white text-night" : "border border-white/10 text-slate-300 hover:border-cyan/60"}`}>
+                  {coin.symbol}/USD
                 </button>
               ))}
             </div>
-            <button onClick={() => setNotice("")} className="glass flex items-center gap-2 rounded-full px-4 py-2 text-sm">
-              <Bell size={16} className="text-cyan" /> {notice ? "1 notification" : "Notifications clear"}
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <span className="glass rounded-full px-4 py-2 text-sm text-slate-300">{marketStatus}</span>
+              <button onClick={() => setNotice("")} className="glass flex items-center gap-2 rounded-full px-4 py-2 text-sm">
+                <Bell size={16} className="text-cyan" /> {notice ? "1 notification" : "Notifications clear"}
+              </button>
+            </div>
           </div>
 
           <AnimatePresence mode="wait">
             <motion.div key={view} initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -12 }} transition={{ duration: 0.25 }}>
-              {view === "overview" && <Overview activeMarket={activeMarket} bot={bot} txs={txs} notice={notice} />}
+              {view === "overview" && <Overview activeMarket={activeMarket} marketCoin={selectedMarket} bot={bot} txs={txs} notice={notice} />}
               {view === "bots" && <Bots bot={bot} setBot={setBot} submitBot={submitBot} />}
               {view === "wallet" && <WalletView addTransaction={addTransaction} txs={txs} />}
               {view === "signals" && <Signals />}
@@ -262,12 +294,12 @@ function AppDashboard() {
   );
 }
 
-function Overview({ activeMarket, bot, txs, notice }: { activeMarket: string; bot: BotState; txs: Tx[]; notice: string }) {
+function Overview({ activeMarket, marketCoin, bot, txs, notice }: { activeMarket: string; marketCoin?: MarketCoin; bot: BotState; txs: Tx[]; notice: string }) {
   return (
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
       <div className="grid gap-5">
         {notice && <div className="glass rounded-2xl border-cyan/30 p-4 text-sm text-cyan">{notice}</div>}
-        <ChartPanel activeMarket={activeMarket} />
+        <ChartPanel activeMarket={activeMarket} marketCoin={marketCoin} />
         <div className="grid gap-5 md:grid-cols-3">
           {[["Portfolio", "$428,904", "+18.6%", CircleDollarSign], ["Bot Profit", "$62,410", "+31.2%", Bot], ["Risk Shield", "98.8%", "Protected", LockKeyhole]].map(([label, value, sub, Icon]) => (
             <motion.div key={label as string} whileHover={{ y: -6 }} className="glass rounded-3xl p-5">
@@ -523,9 +555,41 @@ function LandingSections() {
 
 export default function Home() {
   const [open, setOpen] = useState(false);
+  const [markets, setMarkets] = useState<MarketCoin[]>(fallbackMarkets);
+  const [marketStatus, setMarketStatus] = useState("Demo market fallback");
   const { scrollYProgress } = useScroll();
   const progress = useSpring(scrollYProgress, { stiffness: 120, damping: 28 });
-  const tickerItems = useMemo(() => [...market, ...market], []);
+  const tickerItems = useMemo(() => [...markets, ...markets], [markets]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadMarkets() {
+      try {
+        const response = await fetch("/api/markets");
+        if (!response.ok) {
+          throw new Error("CoinGecko unavailable");
+        }
+        const data = (await response.json()) as MarketCoin[];
+        if (!cancelled && data.length) {
+          setMarkets(data);
+          setMarketStatus(`Live CoinGecko prices · ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+        }
+      } catch {
+        if (!cancelled) {
+          setMarketStatus("Using demo fallback · CoinGecko unavailable");
+        }
+      }
+    }
+
+    loadMarkets();
+    const timer = window.setInterval(loadMarkets, 60000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   return (
     <main className="min-h-screen overflow-hidden bg-grid-radial text-white">
@@ -558,11 +622,11 @@ export default function Home() {
 
       <div className="relative z-10 border-y border-white/10 bg-white/[0.03] py-4">
         <div className="ticker-track flex w-[200%] gap-4 whitespace-nowrap">
-          {tickerItems.map(([coin, price, change], index) => <span key={`${coin}-${index}`} className="mx-2 rounded-full border border-white/10 bg-white/[0.05] px-5 py-2 text-sm"><span className="text-slate-400">{coin}</span> <span>{price}</span> <span className={change.startsWith("-") ? "text-rose-300" : "text-mint"}>{change}</span></span>)}
+          {tickerItems.map((coin, index) => <span key={`${coin.id}-${index}`} className="mx-2 rounded-full border border-white/10 bg-white/[0.05] px-5 py-2 text-sm"><span className="text-slate-400">{coin.symbol}</span> <span>{formatCurrency(coin.price)}</span> <span className={coin.change24h < 0 ? "text-rose-300" : "text-mint"}>{formatChange(coin.change24h)}</span></span>)}
         </div>
       </div>
 
-      <AppDashboard />
+      <AppDashboard markets={markets} marketStatus={marketStatus} />
       <LandingSections />
 
       <footer className="border-t border-white/10 px-4 py-10 sm:px-6">

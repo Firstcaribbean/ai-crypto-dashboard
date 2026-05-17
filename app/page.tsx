@@ -601,7 +601,7 @@ export default function Home() {
           <nav className="hidden items-center gap-6 text-sm text-slate-300 md:flex">
             {["Dashboard", "Pricing", "FAQ"].map((item) => <a key={item} href={item === "FAQ" ? "#Pricing" : `#${item}`} className="transition hover:text-cyan">{item}</a>)}
           </nav>
-          <div className="hidden items-center gap-3 md:flex"><button className="rounded-full border border-white/15 px-4 py-2 text-sm">Sign in</button><a href="#Dashboard" className="rounded-full bg-cyan px-4 py-2 text-sm font-semibold text-night">Launch Dashboard</a></div>
+          <div className="hidden items-center gap-3 md:flex"><a href="/login" className="rounded-full border border-white/15 px-4 py-2 text-sm">Sign in</a><a href="#Dashboard" className="rounded-full bg-cyan px-4 py-2 text-sm font-semibold text-night">Launch Dashboard</a></div>
           <button className="md:hidden" onClick={() => setOpen((value) => !value)} aria-label="Toggle menu">{open ? <X /> : <Menu />}</button>
         </div>
         {open && <div className="border-t border-white/10 bg-night px-4 py-4 md:hidden">{["Dashboard", "Pricing", "FAQ"].map((item) => <a key={item} href={item === "FAQ" ? "#Pricing" : `#${item}`} className="block py-3 text-slate-200" onClick={() => setOpen(false)}>{item}</a>)}</div>}
